@@ -14,7 +14,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-
 func getWorkDir(remoteFilename string) (path string) {
 	remoteUrl, _ := splitRemoteUrlAndFilename(remoteFilename)
 	u, err := parseRemoteUrl(remoteUrl)
@@ -24,6 +23,7 @@ func getWorkDir(remoteFilename string) (path string) {
 	}
 	repositoryPath = strings.TrimSuffix(repositoryPath, git.GitDirName)
 	path = fmt.Sprintf("%s/%s", RobotWorkDir, repositoryPath)
+	path = strings.TrimRight(path, "/")
 	return path
 }
 
@@ -72,7 +72,7 @@ func allowPull(repositoryPath string) (allow bool) {
 
 // relativeWorkDir 获取相对工作目录
 func relativeWorkDir(u *url.URL) (repositoryPath string) {
-	repositoryPath = fmt.Sprintf("%s%s", u.Hostname(), u.Path)
+	repositoryPath = fmt.Sprintf("%s/%s", strings.Trim(u.Hostname(), "/"), strings.Trim(u.Path, "/"))
 	return repositoryPath
 }
 

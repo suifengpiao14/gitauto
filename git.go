@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
 
 	"github.com/go-git/go-git/v5"
@@ -17,8 +18,9 @@ var RobotWorkDir = "/tmp/dml"
 var AllowPullPeriod time.Duration
 var RobotName = "robot_apidml"
 var RobotEmail = ""
+var Branch = "master"
 
-func getRepository(remoteUrl string) (r *git.Repository, err error) {
+func GetRepository(remoteUrl string) (r *git.Repository, err error) {
 	if remoteUrl == "" {
 		err = errors.Errorf("getRepository:remoteUrl not empty ")
 		return nil, err
@@ -27,7 +29,7 @@ func getRepository(remoteUrl string) (r *git.Repository, err error) {
 	r, err = git.PlainOpen(workDir)
 	if errors.Is(err, git.ErrRepositoryNotExists) { // 仓库不存在,clone
 		err = nil
-		r, err = gitClone(remoteUrl)
+		r, err = Clone(remoteUrl)
 		if err != nil {
 			return nil, err
 		}
@@ -54,11 +56,31 @@ func getRepository(remoteUrl string) (r *git.Repository, err error) {
 	if err != nil {
 		return nil, err
 	}
+	createBranch := false
+	_, err = r.Branch(Branch)
+	if errors.Is(err, git.ErrBranchNotFound) {
+		err = nil
+		createBranch = true
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	err = w.Checkout(&git.CheckoutOptions{
-		Force: true,
+		Branch: plumbing.ReferenceName(Branch),
+		Create: createBranch,
+		Force:  true,
 	})
 	if err != nil {
 		return nil, err
+	}
+	if createBranch {
+		err = r.Push(&git.PushOptions{
+			RemoteName: Branch,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	err = w.Pull(&git.PullOptions{
 		Auth:  pullAuth,
@@ -76,7 +98,7 @@ func getRepository(remoteUrl string) (r *git.Repository, err error) {
 // ReadFile 获取文件内容 path=ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/adAdd.md,path=git@github.com:suifengpiao14/apidml/example/doc/addAdd.md
 func ReadFile(remoteFilename string) (b []byte, err error) {
 	remoteUrl, filename := splitRemoteUrlAndFilename(remoteFilename)
-	r, err := getRepository(remoteUrl)
+	r, err := GetRepository(remoteUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +119,7 @@ func ReadFile(remoteFilename string) (b []byte, err error) {
 	return b, nil
 }
 
-func gitClone(remoteUrl string) (r *git.Repository, err error) {
+func Clone(remoteUrl string) (r *git.Repository, err error) {
 	remoteUrlObj, err := parseRemoteUrl(remoteUrl)
 	if err != nil {
 		return nil, err
@@ -116,9 +138,9 @@ func gitClone(remoteUrl string) (r *git.Repository, err error) {
 	return r, nil
 }
 
-func gitPush(remoteUrl string, commitMsg string) (err error) {
+func Push(remoteUrl string, commitMsg string) (err error) {
 	remoteUrl, _ = splitRemoteUrlAndFilename(remoteUrl)
-	r, err := getRepository(remoteUrl)
+	r, err := GetRepository(remoteUrl)
 	if err != nil {
 		return err
 	}
@@ -167,10 +189,10 @@ func gitPush(remoteUrl string, commitMsg string) (err error) {
 	return nil
 }
 
-//gitSetFile 新增、重置文件内容
-func gitSetFile(remoteFilename string, content []byte) (err error) {
+//SetFile 新增、重置文件内容
+func SetFile(remoteFilename string, content []byte) (err error) {
 	remoteUrl, filename := splitRemoteUrlAndFilename(remoteFilename)
-	r, err := getRepository(remoteUrl)
+	r, err := GetRepository(remoteUrl)
 	if err != nil {
 		return err
 	}
@@ -191,16 +213,20 @@ func gitSetFile(remoteFilename string, content []byte) (err error) {
 	if err != nil {
 		return err
 	}
-	return err
+	_, err = w.Add(filename)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func gitDelFile(remoteFilenames ...string) (err error) {
+func DeleteFile(remoteFilenames ...string) (err error) {
 	if len(remoteFilenames) < 1 {
 		return nil
 	}
 	firstRemoteFilename := remoteFilenames[0]
 	remoteUrl, _ := splitRemoteUrlAndFilename(firstRemoteFilename)
-	r, err := getRepository(remoteUrl)
+	r, err := GetRepository(remoteUrl)
 	if err != nil {
 		return err
 	}

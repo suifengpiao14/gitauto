@@ -46,20 +46,20 @@ func TestRead(t *testing.T) {
 func TestGitClone(t *testing.T) {
 	registerAuth()
 	address := "ssh://git@gitea.programmerfamily.com:2221/go/named.git"
-	_, err := gitClone(address)
+	_, err := Clone(address)
 	require.NoError(t, err)
 }
 func TestGitCloneGitHub(t *testing.T) {
 	registerAuth()
 	address := "git@github.com:suifengpiao14/apidml.git"
-	_, err := gitClone(address)
+	_, err := Clone(address)
 	require.NoError(t, err)
 }
 
 func TestGitOpen(t *testing.T) {
 	registerAuth()
-	path := fmt.Sprintf("%s/gitea.programmerfamily.com:2221/go/named", RobotWorkDir)
-	_, err := getRepository(path)
+	path := "ssh://git@gitea.programmerfamily.com:2221/go/coupon.git"
+	_, err := GetRepository(path)
 	require.NoError(t, err)
 }
 
@@ -107,13 +107,13 @@ func TestGitSetFile(t *testing.T) {
 	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/doc/%s", docName)
 	t.Run("create", func(t *testing.T) {
 		b := []byte("hello world")
-		err := gitSetFile(path, b)
+		err := SetFile(path, b)
 		require.NoError(t, err)
 	})
 
 	t.Run("update", func(t *testing.T) {
 		b := []byte("rewrite\n #hello world")
-		err := gitSetFile(path, b)
+		err := SetFile(path, b)
 		require.NoError(t, err)
 	})
 
@@ -123,13 +123,13 @@ func TestGitPush(t *testing.T) {
 	registerAuth()
 	docName := "hello.md"
 	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/doc/%s", docName)
-	err := gitPush(path, "test")
+	err := Push(path, "test")
 	require.NoError(t, err)
 }
 func TestGitDelete(t *testing.T) {
 	registerAuth()
 	docName := "hello.md"
 	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/doc/%s", docName)
-	err := gitDelFile(path)
+	err := DeleteFile(path)
 	require.NoError(t, err)
 }
