@@ -12,7 +12,8 @@ import (
 )
 
 func registerAuth() {
-	privateKeyFile := `C:\Users\Admin\.ssh\id_rsa`
+	//privateKeyFile := `C:\Users\Admin\.ssh\id_rsa`
+	privateKeyFile := `/Users/admin/.ssh/id_rsa`
 	auth, err := ssh.NewPublicKeysFromFile("git", privateKeyFile, "")
 	if err != nil {
 		panic(err)
@@ -58,6 +59,7 @@ func TestGitCloneGitHub(t *testing.T) {
 
 func TestGitOpen(t *testing.T) {
 	registerAuth()
+	LocalBranch = "dev"
 	path := "ssh://git@gitea.programmerfamily.com:2221/go/coupon.git"
 	_, err := GetRepository(path)
 	require.NoError(t, err)
@@ -121,10 +123,13 @@ func TestGitSetFile(t *testing.T) {
 
 func TestGitPush(t *testing.T) {
 	registerAuth()
-	docName := "hello.md"
-	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/doc/%s", docName)
-	err := Push(path, "test")
-	require.NoError(t, err)
+	t.Run("push dev", func(t *testing.T) {
+		LocalBranch = "dev"
+		path := "ssh://git@gitea.programmerfamily.com:2221/go/coupon.git"
+		err := Push(path, "push to dev")
+		require.NoError(t, err)
+	})
+
 }
 func TestGitDelete(t *testing.T) {
 	registerAuth()
