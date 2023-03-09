@@ -19,78 +19,55 @@ var RobotWorkDir = "/tmp/dml"
 var AllowPullPeriod time.Duration
 var RobotName = "robot_apidml"
 var RobotEmail = ""
-var LocalBranch = "master"
-var RemoteName = "origin"
 
-func GetRepository(remoteUrl string) (r *git.Repository, err error) {
+type repository struct {
+	_auth      transport.AuthMethod
+	_r         *git.Repository
+	RemoteName string
+	User       User
+}
+type User struct {
+	Name  string
+	Email string
+}
+
+func NewRepository(remoteUrl string) (rc *repository, err error) {
 	if remoteUrl == "" {
 		err = errors.Errorf("getRepository:remoteUrl not empty ")
 		return nil, err
 	}
+	rc = &repository{
+		RemoteName: "origin",
+		User: User{
+			Name: "robot",
+		},
+	}
 	workDir := getWorkDir(remoteUrl)
-	r, err = git.PlainOpen(workDir)
+	rc._r, err = git.PlainOpen(workDir)
 	if errors.Is(err, git.ErrRepositoryNotExists) { // 仓库不存在,clone
 		err = nil
-		r, err = Clone(remoteUrl)
+		rc._r, err = clone(remoteUrl)
 		if err != nil {
 			return nil, err
 		}
-		return r, nil
 	}
-
+	cfg, err := rc._r.Config()
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := r.Config()
-	if err != nil {
-		return nil, err
-	}
-	var auth transport.AuthMethod
 	auth, u := getHasAuthRemoteUrlFromRepositoryConfig(cfg)
+	if auth != nil {
+		rc._auth = auth
+		return rc, nil
+	}
 	if u != nil {
-		repositoryPath := relativeWorkDir(u)
-		if !allowPull(repositoryPath) {
-			return r, nil
-		}
+		rc._auth, _ = GetAuth(u.User.Username(), u.Hostname())
 	}
-	// 更新
-	w, err := r.Worktree()
-	if err != nil {
-		return nil, err
-	}
-	err = CreateBranch(remoteUrl, LocalBranch)
-	if err != nil {
-		return nil, err
-	}
-	err = w.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName(LocalBranch),
-		Force:  true,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-	err = w.Pull(&git.PullOptions{
-		Auth:  auth,
-		Force: true,
-	})
-	if errors.Is(err, git.NoErrAlreadyUpToDate) { //already up-to-date 为正常情况
-		err = nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return r, nil
+	return rc, nil
 }
 
-// ReadFile 获取文件内容 path=ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/adAdd.md,path=git@github.com:suifengpiao14/apidml/example/doc/addAdd.md
-func ReadFile(remoteFilename string) (b []byte, err error) {
-	remoteUrl, filename := splitRemoteUrlAndFilename(remoteFilename)
-	r, err := GetRepository(remoteUrl)
-	if err != nil {
-		return nil, err
-	}
-	w, err := r.Worktree()
+func (rc *repository) ReadFile(filename string) (b []byte, err error) {
+	w, err := rc._r.Worktree()
 	if err != nil {
 		return nil, err
 	}
@@ -107,24 +84,22 @@ func ReadFile(remoteFilename string) (b []byte, err error) {
 	return b, nil
 }
 
-func CreateBranch(remoteUrl string, branchName string) (err error) {
-	r, err := GetRepository(remoteUrl)
-	if err != nil {
-		return err
-	}
+func (rc *repository) CreateBranch(branchName string) (err error) {
+	r := rc._r
 	localRef := plumbing.NewBranchReferenceName(branchName)
 	err = r.CreateBranch(&config.Branch{
-		Name:   LocalBranch,
-		Remote: RemoteName,
+		Name:   branchName,
+		Remote: rc.RemoteName,
 		Merge:  localRef,
 	})
 	if errors.Is(err, git.ErrBranchExists) {
 		err = nil
+		return nil
 	}
 	if err != nil {
 		return err
 	}
-	remoteRef := plumbing.NewRemoteReferenceName(RemoteName, branchName)
+	remoteRef := plumbing.NewRemoteReferenceName(rc.RemoteName, branchName)
 	hashRef, err := r.Reference(remoteRef, true)
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
 		err = nil
@@ -144,28 +119,41 @@ func CreateBranch(remoteUrl string, branchName string) (err error) {
 	return nil
 }
 
-func Clone(remoteUrl string) (r *git.Repository, err error) {
-	remoteUrlObj, err := parseRemoteUrl(remoteUrl)
+func (rc *repository) Checkout() (err error) {
+	w, err := rc._r.Worktree()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	auth, _ := GetAuth(remoteUrlObj.User.Username(), remoteUrlObj.Hostname())
-	workDir := getWorkDir(remoteUrl)
-	cloneOptions := &git.CloneOptions{
-		Auth: auth,
-		URL:  remoteUrl,
-	}
+	err = w.Checkout(&git.CheckoutOptions{
+		Force: true,
+	})
 
-	r, err = git.PlainClone(workDir, false, cloneOptions)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return r, nil
+	return
 }
 
-func Push(remoteUrl string, commitMsg string) (err error) {
-	remoteUrl, _ = splitRemoteUrlAndFilename(remoteUrl)
-	r, err := GetRepository(remoteUrl)
+func (rc *repository) Pull() (err error) {
+	w, err := rc._r.Worktree()
+	if err != nil {
+		return err
+	}
+	err = w.Pull(&git.PullOptions{
+		Auth:  rc._auth,
+		Force: true,
+	})
+	if errors.Is(err, git.NoErrAlreadyUpToDate) { //already up-to-date 为正常情况
+		err = nil
+	}
+	if err != nil {
+		return err
+	}
+	return
+}
+
+func (rc *repository) CommitWithPush(commitMsg string) (err error) {
+	r := rc._r
 	if err != nil {
 		return err
 	}
@@ -214,17 +202,14 @@ func Push(remoteUrl string, commitMsg string) (err error) {
 	return nil
 }
 
-// AddReplaceFile 新增、重置文件内容
-func AddReplaceFile(remoteFilename string, content []byte) (err error) {
-	remoteUrl, filename := splitRemoteUrlAndFilename(remoteFilename)
-	r, err := GetRepository(remoteUrl)
-	if err != nil {
-		return err
-	}
+// AddReplaceFileToStage 新增、重置文件内容,并执行 git add .
+func (rc *repository) AddReplaceFileToStage(remoteFilename string, content []byte) (err error) {
+	r := rc._r
 	w, err := r.Worktree()
 	if err != nil {
 		return err
 	}
+	_, filename := splitRemoteUrlAndFilename(remoteFilename)
 	billyFile, err := w.Filesystem.OpenFile(filename, os.O_RDWR, os.ModePerm)
 	if errors.Is(err, fs.ErrNotExist) {
 		err = nil
@@ -238,23 +223,15 @@ func AddReplaceFile(remoteFilename string, content []byte) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = w.Add(filename)
+	err = rc.AddAll()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func DeleteFile(remoteFilenames ...string) (err error) {
-	if len(remoteFilenames) < 1 {
-		return nil
-	}
-	firstRemoteFilename := remoteFilenames[0]
-	remoteUrl, _ := splitRemoteUrlAndFilename(firstRemoteFilename)
-	r, err := GetRepository(remoteUrl)
-	if err != nil {
-		return err
-	}
+func (rc *repository) DeleteFile(remoteFilenames ...string) (err error) {
+	r := rc._r
 	w, err := r.Worktree()
 	if err != nil {
 		return err
@@ -266,5 +243,61 @@ func DeleteFile(remoteFilenames ...string) (err error) {
 			return err
 		}
 	}
+	err = rc.AddAll()
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+func (rc *repository) AddAll() (err error) {
+	w, err := rc._r.Worktree()
+	if err != nil {
+		return err
+	}
+	_, err = w.Add(".")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func clone(remoteUrl string) (r *git.Repository, err error) {
+	remoteUrlObj, err := parseRemoteUrl(remoteUrl)
+	if err != nil {
+		return nil, err
+	}
+	auth, _ := GetAuth(remoteUrlObj.User.Username(), remoteUrlObj.Hostname())
+	workDir := getWorkDir(remoteUrl)
+	cloneOptions := &git.CloneOptions{
+		Auth: auth,
+		URL:  remoteUrl,
+	}
+
+	r, err = git.PlainClone(workDir, false, cloneOptions)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// ReadFile 获取文件内容 path=ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/adAdd.md,path=git@github.com:suifengpiao14/apidml/example/doc/addAdd.md
+func ReadFile(remoteFilename string) (b []byte, err error) {
+	remoteUrl, filename := splitRemoteUrlAndFilename(remoteFilename)
+	rc, err := NewRepository(remoteUrl)
+	if err != nil {
+		return nil, err
+	}
+	workDir := getWorkDir(remoteUrl)
+	if allowPull(workDir) {
+		err = rc.Checkout()
+		if err != nil {
+			return nil, err
+		}
+		err = rc.Pull()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return rc.ReadFile(filename)
 }

@@ -35,6 +35,7 @@ func splitRemoteUrlAndFilename(remoteFilename string) (remoteUrl string, filenam
 	}
 	index := gitIndex + 4
 	remoteUrl, filename = remoteFilename[:index], remoteFilename[index:]
+	filename = strings.TrimLeft(filename, "/") //仓库内文件，开头不用"/"
 	return remoteUrl, filename
 }
 

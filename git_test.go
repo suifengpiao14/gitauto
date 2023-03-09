@@ -47,21 +47,20 @@ func TestRead(t *testing.T) {
 func TestGitClone(t *testing.T) {
 	registerAuth()
 	address := "ssh://git@gitea.programmerfamily.com:2221/go/named.git"
-	_, err := Clone(address)
+	_, err := clone(address)
 	require.NoError(t, err)
 }
 func TestGitCloneGitHub(t *testing.T) {
 	registerAuth()
 	address := "git@github.com:suifengpiao14/apidml.git"
-	_, err := Clone(address)
+	_, err := clone(address)
 	require.NoError(t, err)
 }
 
 func TestGitOpen(t *testing.T) {
 	registerAuth()
-	LocalBranch = "dev"
 	path := "ssh://git@gitea.programmerfamily.com:2221/go/coupon.git"
-	_, err := GetRepository(path)
+	_, err := NewRepository(path)
 	require.NoError(t, err)
 }
 
@@ -103,30 +102,34 @@ func TestAllowPull(t *testing.T) {
 	assert.EqualValues(t, expected, actul)
 }
 
-func TestGitSetFile(t *testing.T) {
+func TestAddReplaceFileToStage(t *testing.T) {
 	registerAuth()
 	docName := "hello11.md"
 	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/doc/%s", docName)
+	rc, err := NewRepository(path)
+	require.NoError(t, err)
+
 	t.Run("create", func(t *testing.T) {
 		b := []byte("hello world")
-		err := AddReplaceFile(path, b)
+		err := rc.AddReplaceFileToStage(path, b)
 		require.NoError(t, err)
 	})
 
 	t.Run("update", func(t *testing.T) {
 		b := []byte("rewrite\n #hello world")
-		err := AddReplaceFile(path, b)
+		err := rc.AddReplaceFileToStage(path, b)
 		require.NoError(t, err)
 	})
 
 }
 
-func TestGitPush(t *testing.T) {
+func TestCommitWithPush(t *testing.T) {
 	registerAuth()
+	path := "ssh://git@gitea.programmerfamily.com:2221/go/coupon.git"
+	rc, err := NewRepository(path)
+	require.NoError(t, err)
 	t.Run("push dev", func(t *testing.T) {
-		LocalBranch = "dev"
-		path := "ssh://git@gitea.programmerfamily.com:2221/go/coupon.git"
-		err := Push(path, "push to dev")
+		err := rc.CommitWithPush("push to dev")
 		require.NoError(t, err)
 	})
 
@@ -135,6 +138,8 @@ func TestGitDelete(t *testing.T) {
 	registerAuth()
 	docName := "hello.md"
 	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/doc/%s", docName)
-	err := DeleteFile(path)
+	rc, err := NewRepository(path)
+	require.NoError(t, err)
+	err = rc.DeleteFile(path)
 	require.NoError(t, err)
 }
