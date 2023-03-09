@@ -214,8 +214,8 @@ func Push(remoteUrl string, commitMsg string) (err error) {
 	return nil
 }
 
-// SetFile 新增、重置文件内容
-func SetFile(remoteFilename string, content []byte) (err error) {
+// AddReplaceFile 新增、重置文件内容
+func AddReplaceFile(remoteFilename string, content []byte) (err error) {
 	remoteUrl, filename := splitRemoteUrlAndFilename(remoteFilename)
 	r, err := GetRepository(remoteUrl)
 	if err != nil {

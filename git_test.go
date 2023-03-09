@@ -12,8 +12,8 @@ import (
 )
 
 func registerAuth() {
-	//privateKeyFile := `C:\Users\Admin\.ssh\id_rsa`
-	privateKeyFile := `/Users/admin/.ssh/id_rsa`
+	privateKeyFile := `C:\Users\Admin\.ssh\id_rsa`
+	//privateKeyFile := `/Users/admin/.ssh/id_rsa`
 	auth, err := ssh.NewPublicKeysFromFile("git", privateKeyFile, "")
 	if err != nil {
 		panic(err)
@@ -105,17 +105,17 @@ func TestAllowPull(t *testing.T) {
 
 func TestGitSetFile(t *testing.T) {
 	registerAuth()
-	docName := "hello.md"
+	docName := "hello11.md"
 	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/doc/%s", docName)
 	t.Run("create", func(t *testing.T) {
 		b := []byte("hello world")
-		err := SetFile(path, b)
+		err := AddReplaceFile(path, b)
 		require.NoError(t, err)
 	})
 
 	t.Run("update", func(t *testing.T) {
 		b := []byte("rewrite\n #hello world")
-		err := SetFile(path, b)
+		err := AddReplaceFile(path, b)
 		require.NoError(t, err)
 	})
 
