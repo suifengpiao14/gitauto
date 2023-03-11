@@ -1,9 +1,11 @@
 package gitauto
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -21,10 +23,11 @@ var RobotName = "robot_apidml"
 var RobotEmail = ""
 
 type repository struct {
-	_auth      transport.AuthMethod
-	_r         *git.Repository
-	RemoteName string
-	User       User
+	_auth       transport.AuthMethod
+	_r          *git.Repository
+	RemoteName  string
+	User        User
+	LocalBranch string
 }
 type User struct {
 	Name  string
@@ -51,6 +54,12 @@ func NewRepository(remoteUrl string) (rc *repository, err error) {
 			return nil, err
 		}
 	}
+	// 获取HEAD引用
+	head, err := rc._r.Head()
+	if err != nil {
+		return nil, err
+	}
+	rc.LocalBranch = strings.TrimPrefix(head.Name().String(), "refs/heads/")
 	cfg, err := rc._r.Config()
 	if err != nil {
 		return nil, err
@@ -166,7 +175,16 @@ func (rc *repository) CommitWithPush(commitMsg string) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = w.Add(".")
+	status, err := w.Status()
+	if err != nil {
+		return err
+	}
+	if status.IsClean() {
+		return nil
+	}
+
+	addPath := "."
+	_, err = w.Add(addPath)
 	if err != nil {
 		return err
 	}
@@ -189,13 +207,26 @@ func (rc *repository) CommitWithPush(commitMsg string) (err error) {
 	if errors.Is(err, git.NoErrAlreadyUpToDate) { //already up-to-date 为正常情况
 		err = nil
 	}
+	if errors.Is(err, git.ErrNonFastForwardUpdate) { //ErrNonFastForwardUpdate 为正常情况
+		err = nil
+	}
 	if err != nil {
 		return err
 	}
+
+	branchName := rc.LocalBranch
+	refSpec := config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", branchName, branchName))
+
 	err = r.Push(&git.PushOptions{
 		Auth:      auth,
 		RemoteURL: u.String(),
+		RefSpecs: []config.RefSpec{
+			refSpec,
+		},
 	})
+	if errors.Is(err, git.NoErrAlreadyUpToDate) {
+		err = nil
+	}
 	if err != nil {
 		return err
 	}
