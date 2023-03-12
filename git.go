@@ -1,6 +1,7 @@
 package gitauto
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/fs"
@@ -22,7 +23,7 @@ var AllowPullPeriod time.Duration
 var RobotName = "robot_apidml"
 var RobotEmail = ""
 
-type repository struct {
+type Repository struct {
 	_auth       transport.AuthMethod
 	_r          *git.Repository
 	RemoteName  string
@@ -34,12 +35,12 @@ type User struct {
 	Email string
 }
 
-func NewRepository(remoteUrl string) (rc *repository, err error) {
+func NewRepository(remoteUrl string) (rc *Repository, err error) {
 	if remoteUrl == "" {
 		err = errors.Errorf("getRepository:remoteUrl not empty ")
 		return nil, err
 	}
-	rc = &repository{
+	rc = &Repository{
 		RemoteName: "origin",
 		User: User{
 			Name: "robot",
@@ -75,7 +76,7 @@ func NewRepository(remoteUrl string) (rc *repository, err error) {
 	return rc, nil
 }
 
-func (rc *repository) ReadFile(filename string) (b []byte, err error) {
+func (rc *Repository) ReadFile(filename string) (b []byte, err error) {
 	w, err := rc._r.Worktree()
 	if err != nil {
 		return nil, err
@@ -93,7 +94,7 @@ func (rc *repository) ReadFile(filename string) (b []byte, err error) {
 	return b, nil
 }
 
-func (rc *repository) CreateBranch(branchName string) (err error) {
+func (rc *Repository) CreateBranch(branchName string) (err error) {
 	r := rc._r
 	localRef := plumbing.NewBranchReferenceName(branchName)
 	err = r.CreateBranch(&config.Branch{
@@ -128,7 +129,7 @@ func (rc *repository) CreateBranch(branchName string) (err error) {
 	return nil
 }
 
-func (rc *repository) Checkout() (err error) {
+func (rc *Repository) Checkout() (err error) {
 	w, err := rc._r.Worktree()
 	if err != nil {
 		return err
@@ -143,7 +144,7 @@ func (rc *repository) Checkout() (err error) {
 	return
 }
 
-func (rc *repository) Pull() (err error) {
+func (rc *Repository) Pull() (err error) {
 	w, err := rc._r.Worktree()
 	if err != nil {
 		return err
@@ -161,7 +162,7 @@ func (rc *repository) Pull() (err error) {
 	return
 }
 
-func (rc *repository) CommitWithPush(commitMsg string) (err error) {
+func (rc *Repository) CommitWithPush(commitMsg string) (err error) {
 	r := rc._r
 	if err != nil {
 		return err
@@ -234,7 +235,7 @@ func (rc *repository) CommitWithPush(commitMsg string) (err error) {
 }
 
 // AddReplaceFileToStage 新增、重置文件内容,并执行 git add .
-func (rc *repository) AddReplaceFileToStage(remoteFilename string, content []byte) (err error) {
+func (rc *Repository) AddReplaceFileToStage(remoteFilename string, content []byte) (err error) {
 	r := rc._r
 	w, err := r.Worktree()
 	if err != nil {
@@ -261,7 +262,7 @@ func (rc *repository) AddReplaceFileToStage(remoteFilename string, content []byt
 	return nil
 }
 
-func (rc *repository) DeleteFile(remoteFilenames ...string) (err error) {
+func (rc *Repository) DeleteFile(remoteFilenames ...string) (err error) {
 	r := rc._r
 	w, err := r.Worktree()
 	if err != nil {
@@ -281,7 +282,7 @@ func (rc *repository) DeleteFile(remoteFilenames ...string) (err error) {
 	return nil
 }
 
-func (rc *repository) AddAll() (err error) {
+func (rc *Repository) AddAll() (err error) {
 	w, err := rc._r.Worktree()
 	if err != nil {
 		return err
@@ -331,4 +332,143 @@ func ReadFile(remoteFilename string) (b []byte, err error) {
 		}
 	}
 	return rc.ReadFile(filename)
+}
+
+// GetLineCodeAuthor 获取文件每行作者
+func (rc *Repository) GetLineCodeAuthor(filename string) (lineCodeAuthors LineCodeAuthors, err error) {
+	_, filename = splitRemoteUrlAndFilename(filename)
+	r := rc._r
+	lineCodeAuthors = make(LineCodeAuthors, 0)
+	headRef, err := r.Head()
+	if err != nil {
+		return nil, err
+	}
+	headCommit, err := r.CommitObject(headRef.Hash())
+	if err != nil {
+		return nil, err
+	}
+	blameResult, err := git.Blame(headCommit, filename)
+	if err != nil {
+		return nil, err
+	}
+	for i, line := range blameResult.Lines {
+		lineAuthor := LineWithAuthor{
+			LinNo:  i,
+			Text:   line.Text,
+			Author: Author(line.Author),
+			Time:   line.Date,
+		}
+		lineCodeAuthors = append(lineCodeAuthors, lineAuthor)
+	}
+	return lineCodeAuthors, nil
+}
+
+// 每行代码附带作者
+type LineWithAuthor struct {
+	LinNo  int
+	Text   string
+	Author Author
+	Time   time.Time
+}
+
+type LineCodeAuthors []LineWithAuthor
+
+func (lcas *LineCodeAuthors) Add(lineWithAuthors ...LineWithAuthor) {
+	if lcas == nil {
+		*lcas = make(LineCodeAuthors, 0)
+	}
+	*lcas = append(*lcas, lineWithAuthors...)
+}
+
+func (lcas LineCodeAuthors) GetOneLineAuthors(lineNo int) (lwca LineWithAuthor, ok bool) {
+	if lineNo > len(lcas) {
+		return lwca, false
+	}
+	lwca = lcas[lineNo-1]
+	return lwca, true
+}
+
+// GetAuths 获取某段代码的作者
+func (lcas LineCodeAuthors) GetMutilLineAuthors(star, end int) (authors Authors) {
+	authors = make(Authors, 0)
+	authorMap := make(map[Author]struct{})
+	l := len(lcas)
+	if star >= l {
+		return authors
+	}
+	if star-1 < 0 {
+		star = 1
+	}
+
+	for i := star - 1; i < end; i++ {
+		if i >= l {
+			break
+		}
+		author := Author(lcas[i].Author)
+		authorMap[author] = struct{}{}
+	}
+
+	for auth := range authorMap {
+		authors = append(authors, auth)
+	}
+	return authors
+}
+
+// CreateLineCodeAuthorsFromFile 根据文件内容,生成LineCodeAuthors
+func CreateLineCodeAuthorsFromFile(reader io.Reader, author Author) (lcas LineCodeAuthors) {
+	fileScanner := bufio.NewScanner(reader)
+	fileScanner.Split(bufio.ScanLines)
+	lcas = make(LineCodeAuthors, 0)
+	i := 1
+	for fileScanner.Scan() {
+		lineWithAuthor := LineWithAuthor{
+			LinNo:  i,
+			Text:   fileScanner.Text(),
+			Author: author,
+			Time:   time.Now(),
+		}
+		lcas = append(lcas, lineWithAuthor)
+	}
+	return lcas
+}
+
+type Author string
+type Authors []Author
+
+func (a Authors) Len() int {
+	return len(a)
+}
+func (a Authors) Has(author Author) (ok bool) {
+	for _, author2 := range a {
+		if author == author2 {
+			return true
+		}
+	}
+	return false
+}
+func (a Authors) Only(author Author) (ok bool) {
+	ok = a.Len() == 1 && a.Has(author)
+	return ok
+}
+
+func (a *Authors) AddIngore(authors ...Author) (ok bool) {
+	for _, author := range authors {
+		if a.Has(author) {
+			continue
+		}
+		*a = append(*a, author)
+	}
+	return ok
+}
+
+func (a *Authors) Equal(authors Authors) (ok bool) {
+	if len(*a) != len(authors) {
+		return false
+	}
+	for _, author := range authors {
+		if !a.Has(author) {
+			return false
+		}
+	}
+	return true
 }
