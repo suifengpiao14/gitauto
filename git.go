@@ -20,14 +20,11 @@ import (
 
 var RobotWorkDir = "/tmp/dml"
 var AllowPullPeriod time.Duration
-var RobotName = "robot_apidml"
-var RobotEmail = ""
 
 type Repository struct {
 	_auth       transport.AuthMethod
 	_r          *git.Repository
 	RemoteName  string
-	User        User
 	LocalBranch string
 }
 type User struct {
@@ -42,11 +39,8 @@ func NewRepository(remoteUrl string) (rc *Repository, err error) {
 	}
 	rc = &Repository{
 		RemoteName: "origin",
-		User: User{
-			Name: "robot",
-		},
 	}
-	workDir := getWorkDir(remoteUrl)
+	workDir := GetWorkDir(remoteUrl)
 	rc._r, err = git.PlainOpen(workDir)
 	if errors.Is(err, git.ErrRepositoryNotExists) { // 仓库不存在,clone
 		err = nil
@@ -162,7 +156,11 @@ func (rc *Repository) Pull() (err error) {
 	return
 }
 
-func (rc *Repository) CommitWithPush(commitMsg string) (err error) {
+func (rc *Repository) CommitWithPush(commitMsg string, user User) (err error) {
+	if user.Email == "" {
+		err = errors.Errorf("user.Email not be empty")
+		return err
+	}
 	r := rc._r
 	if err != nil {
 		return err
@@ -193,8 +191,8 @@ func (rc *Repository) CommitWithPush(commitMsg string) (err error) {
 	_, err = w.Commit(commitMsg, &git.CommitOptions{
 		All: true,
 		Author: &object.Signature{
-			Name:  RobotName,
-			Email: RobotEmail,
+			Name:  user.Name,
+			Email: user.Email,
 			When:  time.Now(),
 		},
 	})
@@ -241,7 +239,7 @@ func (rc *Repository) AddReplaceFileToStage(remoteFilename string, content []byt
 	if err != nil {
 		return err
 	}
-	_, filename := splitRemoteUrlAndFilename(remoteFilename)
+	filename := RepositoryFilename(remoteFilename)
 	billyFile, err := w.Filesystem.OpenFile(filename, os.O_RDWR, os.ModePerm)
 	if errors.Is(err, fs.ErrNotExist) {
 		err = nil
@@ -269,7 +267,7 @@ func (rc *Repository) DeleteFile(remoteFilenames ...string) (err error) {
 		return err
 	}
 	for _, remoteFilename := range remoteFilenames {
-		_, filename := splitRemoteUrlAndFilename(remoteFilename)
+		filename := RepositoryFilename(remoteFilename)
 		err = w.Filesystem.Remove(filename)
 		if err != nil {
 			return err
@@ -300,7 +298,7 @@ func clone(remoteUrl string) (r *git.Repository, err error) {
 		return nil, err
 	}
 	auth, _ := GetAuth(remoteUrlObj.User.Username(), remoteUrlObj.Hostname())
-	workDir := getWorkDir(remoteUrl)
+	workDir := GetWorkDir(remoteUrl)
 	cloneOptions := &git.CloneOptions{
 		Auth: auth,
 		URL:  remoteUrl,
@@ -315,12 +313,12 @@ func clone(remoteUrl string) (r *git.Repository, err error) {
 
 // ReadFile 获取文件内容 path=ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/doc/advertise/admin/adAdd.md,path=git@github.com:suifengpiao14/apidml/example/doc/addAdd.md
 func ReadFile(remoteFilename string) (b []byte, err error) {
-	remoteUrl, filename := splitRemoteUrlAndFilename(remoteFilename)
+	remoteUrl, filename := splitRemoteUrlAndRepositoryFilename(remoteFilename)
 	rc, err := NewRepository(remoteUrl)
 	if err != nil {
 		return nil, err
 	}
-	workDir := getWorkDir(remoteUrl)
+	workDir := GetWorkDir(remoteUrl)
 	if allowPull(workDir) {
 		err = rc.Checkout()
 		if err != nil {
@@ -335,8 +333,8 @@ func ReadFile(remoteFilename string) (b []byte, err error) {
 }
 
 // GetLineCodeAuthor 获取文件每行作者
-func (rc *Repository) GetLineCodeAuthor(filename string) (lineCodeAuthors LineCodeAuthors, err error) {
-	_, filename = splitRemoteUrlAndFilename(filename)
+func (rc *Repository) GetLineCodeAuthor(remoteOrLocalFilename string) (lineCodeAuthors LineCodeAuthors, err error) {
+	repositoryFileName := RepositoryFilename(remoteOrLocalFilename)
 	r := rc._r
 	lineCodeAuthors = make(LineCodeAuthors, 0)
 	headRef, err := r.Head()
@@ -347,7 +345,7 @@ func (rc *Repository) GetLineCodeAuthor(filename string) (lineCodeAuthors LineCo
 	if err != nil {
 		return nil, err
 	}
-	blameResult, err := git.Blame(headCommit, filename)
+	blameResult, err := git.Blame(headCommit, repositoryFileName)
 	if err != nil {
 		return nil, err
 	}
@@ -414,8 +412,8 @@ func (lcas LineCodeAuthors) GetMutilLineAuthors(star, end int) (authors Authors)
 	return authors
 }
 
-// CreateLineCodeAuthorsFromFile 根据文件内容,生成LineCodeAuthors
-func CreateLineCodeAuthorsFromFile(reader io.Reader, author Author) (lcas LineCodeAuthors) {
+// CreateLineCodeAuthorsFromIOReader 根据文件内容,生成LineCodeAuthors
+func CreateLineCodeAuthorsFromIOReader(reader io.Reader, author Author) (lcas LineCodeAuthors) {
 	fileScanner := bufio.NewScanner(reader)
 	fileScanner.Split(bufio.ScanLines)
 	lcas = make(LineCodeAuthors, 0)

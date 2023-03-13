@@ -129,7 +129,7 @@ func TestCommitWithPush(t *testing.T) {
 	rc, err := NewRepository(path)
 	require.NoError(t, err)
 	t.Run("push dev", func(t *testing.T) {
-		err := rc.CommitWithPush("push to dev")
+		err := rc.CommitWithPush("push to dev", User{Name: "test"})
 		require.NoError(t, err)
 	})
 
@@ -153,4 +153,10 @@ func TestGetFileLineAuth(t *testing.T) {
 	lineAuths, err := rc.GetLineCodeAuthor(path)
 	require.NoError(t, err)
 	fmt.Println(lineAuths)
+}
+
+func TestGetRepositoryFilenameByLocalFilename(t *testing.T) {
+	localFilename := `D:\tmp\dml\gitea.programmerfamily.com\go\coupon\router\api\ad\admin_v1_ad_list.go`
+	repositoryFilename := getRepositoryFilenameByLocalFilename(localFilename)
+	fmt.Println(repositoryFilename)
 }

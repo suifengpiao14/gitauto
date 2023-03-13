@@ -3,6 +3,7 @@ package gitauto
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -14,8 +15,24 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func getWorkDir(remoteFilename string) (path string) {
-	remoteUrl, _ := splitRemoteUrlAndFilename(remoteFilename)
+func LocalFilename(remoteFilename string) (localFilename string) {
+	remoteUrl, repositoryFilename := splitRemoteUrlAndRepositoryFilename(remoteFilename)
+	workDir := GetWorkDir(remoteUrl)
+	localFilename = fmt.Sprintf("%s/%s", strings.TrimRight(workDir, "/"), strings.TrimLeft(repositoryFilename, "/"))
+	return localFilename
+}
+
+//RepositoryFilename 从本地或者远程文件名获取仓库内文件名
+func RepositoryFilename(remoteOrLocalFilename string) (repositoryFilename string) {
+	if strings.HasPrefix(remoteOrLocalFilename, RobotWorkDir) {
+		return getRepositoryFilenameByLocalFilename(remoteOrLocalFilename)
+	}
+	_, repositoryFilename = splitRemoteUrlAndRepositoryFilename(remoteOrLocalFilename)
+	return repositoryFilename
+}
+
+func GetWorkDir(remoteFilename string) (path string) {
+	remoteUrl, _ := splitRemoteUrlAndRepositoryFilename(remoteFilename)
 	u, err := parseRemoteUrl(remoteUrl)
 	repositoryPath := remoteUrl
 	if err == nil {
@@ -27,8 +44,8 @@ func getWorkDir(remoteFilename string) (path string) {
 	return path
 }
 
-//splitRemoteUrlAndFilename 从远程文件路径中识别出远程仓库地址和仓库下文件名,如果没有.git 标记，则全部当成filename 返回（批量设置文件内容时，有用到这个特性）
-func splitRemoteUrlAndFilename(remoteFilename string) (remoteUrl string, filename string) {
+//splitRemoteUrlAndRepositoryFilename 从远程文件路径中识别出远程仓库地址和仓库下文件名,如果没有.git 标记，则全部当成filename 返回（批量设置文件内容时，有用到这个特性）
+func splitRemoteUrlAndRepositoryFilename(remoteFilename string) (remoteUrl string, filename string) {
 	gitIndex := strings.Index(remoteFilename, git.GitDirName)
 	if gitIndex < 0 {
 		return "", remoteFilename
@@ -122,4 +139,38 @@ func detectSSH(src string) (*url.URL, error) {
 	u.Fragment = tmpU.Fragment
 
 	return &u, nil
+}
+
+func getRepositoryFilenameByLocalFilename(localFilename string) (repositoryFilename string) {
+	var split = `/`
+	if strings.Contains(localFilename, `\`) {
+		split = `\`
+	}
+	filename := strings.TrimRight(localFilename, split)
+	for {
+		lastSlashIndex := strings.LastIndex(filename, split)
+		if lastSlashIndex > -1 {
+			var basename string
+			filename, basename = filename[:lastSlashIndex], filename[lastSlashIndex+1:]
+			repositoryFilename = fmt.Sprintf("%s/%s", basename, repositoryFilename)
+			gitDir := fmt.Sprintf("%s/%s", filename, git.GitDirName)
+			if IsDir(gitDir) {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	repositoryFilename = strings.Trim(repositoryFilename, "/")
+	return repositoryFilename
+}
+
+func IsDir(path string) bool {
+	s, err := os.Stat(path)
+	if err != nil {
+
+		return false
+	}
+	return s.IsDir()
+
 }
