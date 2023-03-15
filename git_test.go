@@ -12,8 +12,8 @@ import (
 )
 
 func registerAuth() {
-	//privateKeyFile := `C:\Users\Admin\.ssh\id_rsa`
-	privateKeyFile := `/Users/admin/.ssh/id_rsa`
+	privateKeyFile := `C:\Users\Admin\.ssh\id_rsa`
+	//privateKeyFile := `/Users/admin/.ssh/id_rsa`
 	auth, err := ssh.NewPublicKeysFromFile("git", privateKeyFile, "")
 	if err != nil {
 		panic(err)
@@ -144,10 +144,23 @@ func TestGitDelete(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestGetFileLineAuth(t *testing.T) {
+func TestGetFileLineAuthor(t *testing.T) {
 	registerAuth()
-	docName := "admin_v1_ad_list.go"
-	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/router/api/ad/%s", docName)
+	//docName := "admin_v1_ad_list.go"
+	docName := "router.go"
+	path := fmt.Sprintf("ssh://git@gitea.programmerfamily.com:2221/go/coupon.git/router/%s", docName)
+	rc, err := NewRepository(path)
+	require.NoError(t, err)
+	lineAuths, err := rc.GetLineCodeAuthor(path)
+	require.NoError(t, err)
+	fmt.Println(lineAuths)
+}
+
+func TestGetFileLineAuthor2(t *testing.T) {
+	registerAuth()
+	//docName := "admin_v1_ad_list.go"
+	docName := "git.go"
+	path := fmt.Sprintf("git@github.com:suifengpiao14/gitauto.git/%s", docName)
 	rc, err := NewRepository(path)
 	require.NoError(t, err)
 	lineAuths, err := rc.GetLineCodeAuthor(path)

@@ -9,6 +9,8 @@ require (
 	golang.org/x/time v0.3.0
 )
 
+replace github.com/go-git/go-git/v5 v5.6.0 => github.com/suifengpiao14/go-git/v5 v5.6.2
+
 //replace github.com/go-git/go-git/v5 => D:\\go\\go-git
 
 require (

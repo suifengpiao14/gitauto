@@ -293,6 +293,7 @@ func (rc *Repository) AddAll() (err error) {
 }
 
 func clone(remoteUrl string) (r *git.Repository, err error) {
+	remoteUrl, _ = splitRemoteUrlAndRepositoryFilename(remoteUrl)
 	remoteUrlObj, err := parseRemoteUrl(remoteUrl)
 	if err != nil {
 		return nil, err
