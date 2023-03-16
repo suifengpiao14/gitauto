@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"strings"
 	"time"
@@ -240,15 +239,19 @@ func (rc *Repository) AddReplaceFileToStage(remoteFilename string, content []byt
 		return err
 	}
 	filename := RepositoryFilename(remoteFilename)
-	billyFile, err := w.Filesystem.OpenFile(filename, os.O_RDWR, os.ModePerm)
-	if errors.Is(err, fs.ErrNotExist) {
-		err = nil
-		billyFile, err = w.Filesystem.Create(filename)
-	}
+	billyFile, err := w.Filesystem.OpenFile(filename, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return err
 	}
 	defer billyFile.Close()
+	err = billyFile.Truncate(0)
+	if err != nil {
+		return err
+	}
+	_, err = billyFile.Seek(0, io.SeekStart)
+	if err != nil {
+		return err
+	}
 	_, err = billyFile.Write(content)
 	if err != nil {
 		return err
