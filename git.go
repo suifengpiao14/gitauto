@@ -256,10 +256,6 @@ func (rc *Repository) AddReplaceFileToStage(remoteFilename string, content []byt
 	if err != nil {
 		return err
 	}
-	err = rc.AddAll()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
