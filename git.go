@@ -361,6 +361,27 @@ func (rc *Repository) GetLineCodeAuthor(remoteOrLocalFilename string) (lineCodeA
 	return lineCodeAuthors, nil
 }
 
+func (rc *Repository) Exists(remoteOrLocalFilename string) (exits bool, err error) {
+	repositoryFileName := RepositoryFilename(remoteOrLocalFilename)
+	r := rc._r
+	headRef, err := r.Head()
+	if err != nil {
+		return false, err
+	}
+	headCommit, err := r.CommitObject(headRef.Hash())
+	if err != nil {
+		return false, err
+	}
+	_, err = headCommit.File(repositoryFileName)
+	if err != nil {
+		if errors.Is(err, object.ErrFileNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return false, nil
+}
+
 // 每行代码附带作者
 type LineWithAuthor struct {
 	LinNo  int
