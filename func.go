@@ -31,6 +31,11 @@ func RepositoryFilename(remoteOrLocalFilename string) (repositoryFilename string
 	return repositoryFilename
 }
 
+func RepositoryUrl(remoteFilename string) (remoteUrl string) {
+	remoteUrl, _ = splitRemoteUrlAndRepositoryFilename(remoteFilename)
+	return remoteUrl
+}
+
 func GetWorkDir(remoteFilename string) (path string) {
 	remoteUrl, _ := splitRemoteUrlAndRepositoryFilename(remoteFilename)
 	u, err := parseRemoteUrl(remoteUrl)
